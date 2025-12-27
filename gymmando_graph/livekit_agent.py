@@ -19,7 +19,8 @@ from livekit import agents
 from livekit.agents import Agent, AgentSession, RunContext
 from livekit.agents.llm import function_tool
 from livekit.plugins import groq, openai, silero
-from utils import Logger
+
+from gymmando_graph.utils import Logger
 
 # Load environment variables
 load_dotenv()
