@@ -16,7 +16,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from livekit import agents
-from livekit.agents import Agent, AgentSession
+from livekit.agents import Agent, AgentSession, RunContext
+from livekit.agents.llm import function_tool
 from livekit.plugins import groq, openai, silero
 from utils import Logger
 
@@ -55,6 +56,27 @@ class Gymmando(Agent):
         super().__init__(instructions=system_prompt)
 
         logger.info("✅ Gymmando agent initialized")
+
+    @function_tool
+    async def workout(self, context: RunContext, transcript: str) -> str:
+        """Log a workout or query workout history. Use this for exercise-related requests."""
+        # TODO: Implement workout graph call
+        logger.info(f"🏋️ Workout function called with: {transcript}")
+        return "Workout called"
+
+    @function_tool
+    async def nutrition(self, context: RunContext, transcript: str) -> str:
+        """Log meals or query nutrition info. Use this for food/diet-related requests."""
+        # TODO: Implement nutrition graph call
+        logger.info(f"🍗 Nutrition function called with: {transcript}")
+        return "Nutrition called"
+
+    @function_tool
+    async def measurements(self, context: RunContext, transcript: str) -> str:
+        """Log body measurements or query measurement history. Use for weight/body tracking."""
+        # TODO: Implement measurements graph call
+        logger.info(f"📏 Measurements function called with: {transcript}")
+        return "Measurements called"
 
 
 async def entrypoint(ctx: agents.JobContext):
