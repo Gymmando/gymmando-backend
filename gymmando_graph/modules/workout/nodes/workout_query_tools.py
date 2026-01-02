@@ -45,7 +45,7 @@ def _query_workouts_impl(
     """
     try:
         logger.info(
-            f"Querying workouts with params: user_id={user_id}, exercise={exercise}, limit={limit}"
+            f"🔍 Querying workouts from Supabase with params: user_id={user_id}, exercise={exercise}, limit={limit}"
         )
         client = get_supabase_client()
         query = client.table("workouts").select("*").eq("user_id", user_id)

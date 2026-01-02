@@ -40,8 +40,9 @@ class Gymmando(Agent):
 
     @function_tool
     async def workout(self, context: RunContext, transcript: str, intent: str) -> str:
-        logger.info(f"🏋️ Workout called - Intent: {intent}")
+        logger.info(f"🏋️ Workout called - Intent: {intent}, User ID: {self.user_id}")
         state = WorkoutState(user_input=transcript, user_id=self.user_id, intent=intent)
+        logger.info(f"📝 Created WorkoutState with user_id: {state.user_id}")
         try:
             state = self.workout_graph.run(state)
 
@@ -64,23 +65,38 @@ class Gymmando(Agent):
 async def entrypoint(ctx: agents.JobContext):
     logger.info(f"🚀 Job Assigned: {ctx.job.id}")
 
-    # 1. SAFELY PARSE USER ID FROM METADATA
+    # 1. GET USER ID FROM PARTICIPANT IDENTITY OR METADATA
     user_id = "default_user"
     try:
-        metadata_raw = ctx.room.metadata
-        if metadata_raw:
-            # If it's a string, try to parse JSON
-            if isinstance(metadata_raw, str):
-                try:
-                    data = json.loads(metadata_raw)
-                    user_id = data.get("user_id", "default_user")
-                except json.JSONDecodeError:
-                    # If it's just a raw string like "user123"
-                    user_id = metadata_raw
-            elif isinstance(metadata_raw, dict):
-                user_id = metadata_raw.get("user_id", "default_user")
+        # First, try to get from participant identity (set via token)
+        # The identity is set when creating the token with user_id
+        await ctx.connect()  # Connect to get room participants
+        for participant in ctx.room.remote_participants.values():
+            if participant.identity and participant.identity != "agent":
+                user_id = participant.identity
+                logger.info(f"✅ Found user_id from participant identity: {user_id}")
+                break
+
+        # Fallback: try metadata if identity not found
+        if user_id == "default_user":
+            metadata_raw = ctx.room.metadata
+            if metadata_raw:
+                # If it's a string, try to parse JSON
+                if isinstance(metadata_raw, str):
+                    try:
+                        data = json.loads(metadata_raw)
+                        user_id = data.get("user_id", "default_user")
+                    except json.JSONDecodeError:
+                        # If it's just a raw string like "user123"
+                        user_id = metadata_raw
+                elif isinstance(metadata_raw, dict):
+                    user_id = metadata_raw.get("user_id", "default_user")
+                if user_id != "default_user":
+                    logger.info(f"✅ Found user_id from metadata: {user_id}")
     except Exception as e:
-        logger.warning(f"Metadata parse failed: {e}. Using default_user.")
+        logger.warning(f"User ID parse failed: {e}. Using default_user.")
+
+    logger.info(f"👤 Using user_id: {user_id}")
 
     # 2. ROBUST GREETING LOAD
     greeting_path = PROMPTS_DIR / "main_llm_greeting_prompt.md"

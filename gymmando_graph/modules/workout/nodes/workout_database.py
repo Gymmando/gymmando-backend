@@ -52,9 +52,9 @@ class WorkoutDatabase:
         try:
             # Insert into database
             logger.info(
-                f"Saving workout: {workout_create.exercise} - "
+                f"💾 Saving workout to Supabase: {workout_create.exercise} - "
                 f"{workout_create.sets}x{workout_create.reps} @ {workout_create.weight} "
-                f"for user {workout_create.user_id}"
+                f"for user_id: {workout_create.user_id}"
             )
 
             # FIX: Get the client right before use
