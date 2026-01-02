@@ -24,7 +24,11 @@ def create_livekit_token(identity: str = "user_123", room: str = "gym-room") -> 
 
 
 @app.get("/token")
-def get_token():
-    """Generate a LiveKit token for client connection."""
-    token = create_livekit_token()
+def get_token(user_id: str = "default_user"):
+    """Generate a LiveKit token for client connection.
+
+    Args:
+        user_id: Firebase user ID (passed as query parameter)
+    """
+    token = create_livekit_token(identity=user_id)
     return {"token": token}
