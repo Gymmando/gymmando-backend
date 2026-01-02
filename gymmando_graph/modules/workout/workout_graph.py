@@ -8,11 +8,11 @@ from gymmando_graph.modules.workout.nodes.workout_validator import WorkoutValida
 from gymmando_graph.modules.workout.schemas import WorkoutState
 from gymmando_graph.utils import Logger
 
+logger = Logger().get_logger()
+
 
 class WorkoutGraph:
     def __init__(self):
-        # initialize logger
-        self.logger = Logger().get_logger()
         # initialize the workout parser
         self.workout_parser = WorkoutParser()
         # initialize the validator
@@ -84,25 +84,21 @@ class WorkoutGraph:
     def _workout_database_node(self, state: WorkoutState) -> WorkoutState:
         """Save workout to database. Called only when validation is complete and intent is 'put'."""
         try:
-            self.logger.info("Attempting to save workout to database...")
+            logger.info("Attempting to save workout to database...")
             saved_workout = self.database.save_workout(state)
 
             if saved_workout:
-                self.logger.info(
-                    f"Workout saved successfully with ID: {saved_workout.id}"
-                )
+                logger.info(f"Workout saved successfully with ID: {saved_workout.id}")
                 state.response = f"Workout saved! {state.exercise}: {state.sets}x{state.reps} @ {state.weight}"
             else:
-                self.logger.error("Failed to save workout - database returned None")
+                logger.error("Failed to save workout - database returned None")
                 state.response = "Failed to save workout. Please try again."
 
         except ValueError as e:
-            self.logger.error(f"Validation error while saving workout: {e}")
+            logger.error(f"Validation error while saving workout: {e}")
             state.response = f"Cannot save workout: {str(e)}"
         except Exception as e:
-            self.logger.error(
-                f"Unexpected error while saving workout: {e}", exc_info=True
-            )
+            logger.error(f"Unexpected error while saving workout: {e}", exc_info=True)
             state.response = (
                 "An error occurred while saving your workout. Please try again."
             )
@@ -122,7 +118,7 @@ class WorkoutGraph:
         Returns:
             Final WorkoutState after graph execution
         """
-        self.logger.info(f"Running workout graph with intent: {state.intent}")
+        logger.info(f"Running workout graph with intent: {state.intent}")
         # Convert state to dict for graph.invoke()
         state_dict = (
             state.model_dump() if hasattr(state, "model_dump") else state.dict()
@@ -130,7 +126,7 @@ class WorkoutGraph:
         result_dict = self.graph.invoke(state_dict)
         # Convert result back to WorkoutState
         result = WorkoutState(**result_dict)
-        self.logger.info(f"Graph execution completed. Response: {result.response}")
+        logger.info(f"Graph execution completed. Response: {result.response}")
         return result
 
 
@@ -138,13 +134,13 @@ if __name__ == "__main__":
     workout_graph = WorkoutGraph()
     state = WorkoutState(user_input="", user_id="test_user")
 
-    workout_graph.logger.info("Workout Graph Test - Type 'exit' to quit")
+    logger.info("Workout Graph Test - Type 'exit' to quit")
 
     while True:
         user_input = input("Ask your question: ").strip()
 
         if user_input.lower() in ["exit", "quit", "q"]:
-            workout_graph.logger.info("Exiting workout graph")
+            logger.info("Exiting workout graph")
             break
 
         if not user_input:
@@ -156,4 +152,4 @@ if __name__ == "__main__":
         # Run the graph
         state = workout_graph.run(state)
 
-        workout_graph.logger.info("=" * 50)
+        logger.info("=" * 50)

@@ -27,7 +27,6 @@ class WorkoutDatabase:
     def __init__(self):
         """Initialize the workout database service."""
         self.table_name = "workouts"
-        self.logger = logger
 
     def save_workout(self, state: WorkoutState) -> Optional[WorkoutDBModel]:
         """
@@ -36,7 +35,7 @@ class WorkoutDatabase:
         # Validate that required fields are present
         if not state.exercise or not state.sets or not state.reps or not state.weight:
             error_msg = "Cannot save workout: missing required fields"
-            self.logger.error(error_msg)
+            logger.error(error_msg)
             raise ValueError(error_msg)
 
         # Create database model from state
@@ -52,7 +51,7 @@ class WorkoutDatabase:
 
         try:
             # Insert into database
-            self.logger.info(
+            logger.info(
                 f"Saving workout: {workout_create.exercise} - "
                 f"{workout_create.sets}x{workout_create.reps} @ {workout_create.weight} "
                 f"for user {workout_create.user_id}"
@@ -68,16 +67,14 @@ class WorkoutDatabase:
 
             if response.data and len(response.data) > 0:
                 saved_workout = WorkoutDBModel(**response.data[0])
-                self.logger.info(
-                    f"Workout saved successfully with ID: {saved_workout.id}"
-                )
+                logger.info(f"Workout saved successfully with ID: {saved_workout.id}")
                 return saved_workout
             else:
-                self.logger.error("Database insert returned no data")
+                logger.error("Database insert returned no data")
                 return None
 
         except Exception as e:
-            self.logger.error(f"Failed to save workout to database: {e}", exc_info=True)
+            logger.error(f"Failed to save workout to database: {e}", exc_info=True)
             raise
 
     def get_workout_by_id(
@@ -102,9 +99,7 @@ class WorkoutDatabase:
             return None
 
         except Exception as e:
-            self.logger.error(
-                f"Failed to retrieve workout {workout_id}: {e}", exc_info=True
-            )
+            logger.error(f"Failed to retrieve workout {workout_id}: {e}", exc_info=True)
             return None
 
     def get_user_workouts(
@@ -127,11 +122,11 @@ class WorkoutDatabase:
             )
 
             workouts = [WorkoutDBModel(**item) for item in response.data]
-            self.logger.info(f"Retrieved {len(workouts)} workouts for user {user_id}")
+            logger.info(f"Retrieved {len(workouts)} workouts for user {user_id}")
             return workouts
 
         except Exception as e:
-            self.logger.error(
+            logger.error(
                 f"Failed to retrieve workouts for user {user_id}: {e}", exc_info=True
             )
             return []
