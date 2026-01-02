@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -91,16 +92,30 @@ async def entrypoint(ctx: agents.JobContext):
 
     try:
         logger.info("⚙️  Starting session services...")
+
+        # Check if OpenAI API key is available
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            logger.warning("⚠️ OPENAI_API_KEY not found in environment variables")
+        else:
+            logger.info(f"✅ OPENAI_API_KEY found (length: {len(openai_key)})")
+
+        logger.info("🔧 Initializing TTS service...")
+        tts_service = openai.TTS(voice="onyx")
+        logger.info("✅ TTS service initialized")
+
         session = AgentSession(
             stt=groq.STT(model="whisper-large-v3-turbo"),
-            tts=openai.TTS(voice="onyx"),
+            tts=tts_service,
             llm=openai.LLM(model="gpt-4o-mini"),
             vad=silero.VAD.load(force_cpu=True),
         )
+        logger.info("✅ AgentSession created")
 
         gymmando = Gymmando(user_id=user_id)
 
         # Connect to the room
+        logger.info("🔌 Connecting session to room...")
         await session.start(
             room=ctx.room,
             agent=gymmando,
@@ -110,8 +125,14 @@ async def entrypoint(ctx: agents.JobContext):
         logger.info(f"✅ Session active in room: {ctx.room.name}")
 
         # 3. GENERATE INITIAL GREETING
-        await session.generate_reply(instructions=greeting_prompt)
-        logger.info("👋 Greeting sent.")
+        logger.info(f"🎤 Generating greeting with prompt: {greeting_prompt[:50]}...")
+        try:
+            await session.generate_reply(instructions=greeting_prompt)
+            logger.info("👋 Greeting sent successfully.")
+        except Exception as greeting_error:
+            logger.error(
+                f"❌ Failed to generate greeting: {greeting_error}", exc_info=True
+            )
 
     except Exception as e:
         logger.error(f"❌ Agent error: {str(e)}", exc_info=True)
@@ -120,6 +141,31 @@ async def entrypoint(ctx: agents.JobContext):
 
 if __name__ == "__main__":
     logger.info("🎬 Starting Gymmando Worker...")
+
+    # Log environment variables for debugging (without exposing secrets)
+    livekit_url = os.getenv("LIVEKIT_URL")
+    livekit_key = os.getenv("LIVEKIT_API_KEY")
+    livekit_secret = os.getenv("LIVEKIT_API_SECRET")
+    openai_key = os.getenv("OPENAI_API_KEY")
+    groq_key = os.getenv("GROQ_API_KEY")
+
+    logger.info(f"🔍 Environment check:")
+    logger.info(
+        f"  LIVEKIT_URL: {'✅ Set' if livekit_url else '❌ Missing'} ({livekit_url if livekit_url else 'N/A'})"
+    )
+    logger.info(
+        f"  LIVEKIT_API_KEY: {'✅ Set' if livekit_key else '❌ Missing'} (length: {len(livekit_key) if livekit_key else 0})"
+    )
+    logger.info(
+        f"  LIVEKIT_API_SECRET: {'✅ Set' if livekit_secret else '❌ Missing'} (length: {len(livekit_secret) if livekit_secret else 0})"
+    )
+    logger.info(
+        f"  OPENAI_API_KEY: {'✅ Set' if openai_key else '❌ Missing'} (length: {len(openai_key) if openai_key else 0})"
+    )
+    logger.info(
+        f"  GROQ_API_KEY: {'✅ Set' if groq_key else '❌ Missing'} (length: {len(groq_key) if groq_key else 0})"
+    )
+
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
