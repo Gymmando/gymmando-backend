@@ -1,6 +1,7 @@
-"""
-Workout CRUD operations.
-Handles all database operations for workouts.
+"""Workout CRUD operations module.
+
+This module provides database operations for the workouts table including
+create, read (query), update, and delete operations using Supabase.
 """
 
 from typing import List, Optional
@@ -15,25 +16,68 @@ logger = Logger().get_logger()
 
 
 class WorkoutCRUD:
-    """CRUD operations for workout table."""
+    """CRUD operations for workout table.
+
+    Provides methods for creating, querying, updating, and deleting workout
+    records in the Supabase database. All operations are scoped to user_id
+    for security.
+
+    Attributes
+    ----------
+    table_name : str
+        Name of the database table ("workouts").
+
+    Examples
+    --------
+    >>> crud = WorkoutCRUD()
+    >>> workout = crud.create(state)
+    >>> workouts = crud.query(user_id="user123", exercise="squats", limit=5)
+    >>> updated = crud.update(workout_id, user_id, {"sets": 4})
+    >>> success = crud.delete(workout_id, user_id)
+    """
 
     def __init__(self):
-        """Initialize the workout CRUD service."""
+        """Initialize the workout CRUD service.
+
+        Sets up the table name for workout operations. The Supabase client
+        is loaded lazily on first use.
+        """
         self.table_name = "workouts"
 
     def _get_client(self):
-        """Get Supabase client (lazy loading)."""
+        """Get Supabase client instance (lazy loading).
+
+        Returns
+        -------
+        Client
+            Initialized Supabase client for database operations.
+        """
         return get_supabase_client()
 
     def create(self, state: WorkoutState) -> Optional[WorkoutDBModel]:
-        """
-        Create a new workout record.
+        """Create a new workout record in the database.
 
-        Args:
-            state: WorkoutState containing workout data
+        Validates that all required fields (exercise, sets, reps, weight) are
+        present, then inserts a new workout record into the database.
 
-        Returns:
-            WorkoutDBModel if successful, None otherwise
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing workout data to create (exercise, sets, reps,
+            weight, rest_time, comments, user_id).
+
+        Returns
+        -------
+        Optional[WorkoutDBModel]
+            Created workout model if successful, None if database insert
+            returned no data.
+
+        Raises
+        ------
+        ValueError
+            If required fields (exercise, sets, reps, weight) are missing.
+        Exception
+            Re-raises any database errors that occur during insertion.
         """
         # Validate that required fields are present
         if not state.exercise or not state.sets or not state.reps or not state.weight:
@@ -89,21 +133,42 @@ class WorkoutCRUD:
         order_by: Optional[str] = "created_at",
         order_direction: Optional[str] = "desc",
     ) -> List[WorkoutDBModel]:
-        """
-        Read workouts from the database based on filters.
+        """Query workouts from the database based on filters.
 
-        Args:
-            user_id: The user ID to filter workouts by (required)
-            exercise: Filter by specific exercise name (e.g., "squats", "bench press")
-            exercise_type: Filter by exercise type/category (e.g., "legs", "chest", "arms")
-            start_date: Start date for date range filter (YYYY-MM-DD format)
-            end_date: End date for date range filter (YYYY-MM-DD format)
-            limit: Maximum number of workouts to return (default: 10)
-            order_by: Field to order by (default: "created_at")
-            order_direction: Order direction - "asc" or "desc" (default: "desc")
+        Reads workout records matching the specified filters. All queries
+        are scoped to the provided user_id for security.
 
-        Returns:
-            List of WorkoutDBModel instances
+        Parameters
+        ----------
+        user_id : str
+            The user ID to filter workouts by (required).
+        exercise : Optional[str], optional
+            Filter by specific exercise name using case-insensitive partial
+            matching (e.g., "squats", "bench press").
+        exercise_type : Optional[str], optional
+            Filter by exercise type/category (e.g., "legs", "chest", "arms").
+            Currently not implemented in database schema.
+        start_date : Optional[str], optional
+            Start date for date range filter in YYYY-MM-DD format.
+        end_date : Optional[str], optional
+            End date for date range filter in YYYY-MM-DD format.
+        limit : Optional[int], optional
+            Maximum number of workouts to return (default: 10).
+        order_by : Optional[str], optional
+            Field to order by (default: "created_at").
+        order_direction : Optional[str], optional
+            Order direction - "asc" or "desc" (default: "desc").
+
+        Returns
+        -------
+        List[WorkoutDBModel]
+            List of workout models matching the query criteria. Returns empty
+            list if no workouts found or on error.
+
+        Notes
+        -----
+        Errors are caught and logged, but an empty list is returned rather
+        than raising exceptions to allow the workflow to continue.
         """
         try:
             logger.info(
@@ -153,17 +218,32 @@ class WorkoutCRUD:
     def update(
         self, workout_id: UUID, user_id: str, data: dict
     ) -> Optional[WorkoutDBModel]:
-        """
-        Update an existing workout record.
+        """Update an existing workout record in the database.
 
-        Args:
-            workout_id: UUID of the workout to update
-            user_id: User ID for security filtering
-            data: Dictionary containing the fields to update
-                  (e.g., {"sets": 5, "reps": 10, "weight": "225 lbs"})
+        Updates specified fields of a workout identified by workout_id.
+        Only updates workouts belonging to the specified user_id for security.
 
-        Returns:
-            Updated WorkoutDBModel if successful, None otherwise
+        Parameters
+        ----------
+        workout_id : UUID
+            UUID of the workout to update.
+        user_id : str
+            User ID for security filtering (ensures users can only update
+            their own workouts).
+        data : dict
+            Dictionary containing the fields to update. Keys should match
+            database column names (e.g., {"sets": 5, "reps": 10, "weight": "225 lbs"}).
+
+        Returns
+        -------
+        Optional[WorkoutDBModel]
+            Updated workout model if successful, None if workout not found
+            or user doesn't have permission.
+
+        Notes
+        -----
+        The update operation uses both workout_id and user_id in the WHERE
+        clause to ensure users can only update their own workouts.
         """
         try:
             logger.info(
@@ -194,15 +274,29 @@ class WorkoutCRUD:
             return None
 
     def delete(self, workout_id: UUID, user_id: str) -> bool:
-        """
-        Delete a workout record.
+        """Delete a workout record from the database.
 
-        Args:
-            workout_id: UUID of the workout to delete
-            user_id: User ID for security filtering
+        Removes a workout identified by workout_id. Only deletes workouts
+        belonging to the specified user_id for security.
 
-        Returns:
-            True if deletion was successful, False otherwise
+        Parameters
+        ----------
+        workout_id : UUID
+            UUID of the workout to delete.
+        user_id : str
+            User ID for security filtering (ensures users can only delete
+            their own workouts).
+
+        Returns
+        -------
+        bool
+            True if deletion was successful, False if an error occurred.
+
+        Notes
+        -----
+        The delete operation uses both workout_id and user_id in the WHERE
+        clause to ensure users can only delete their own workouts. Supabase
+        returns an empty array on successful deletion.
         """
         try:
             logger.info(f"🗑️ Deleting workout {workout_id} for user {user_id}")

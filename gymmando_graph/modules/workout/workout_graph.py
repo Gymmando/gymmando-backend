@@ -1,3 +1,10 @@
+"""Workout graph module for managing workout operations through a state graph.
+
+This module implements a LangGraph-based workflow for processing workout-related
+user requests including parsing, validation, creation, reading, updating, and
+deletion of workout records.
+"""
+
 from typing import Any, Literal, cast
 
 from langgraph.graph import END, START, StateGraph
@@ -12,7 +19,41 @@ logger = Logger().get_logger()
 
 
 class WorkoutGraph:
+    """State graph for managing workout operations.
+
+    This class orchestrates the workflow for workout-related operations including:
+    - Parsing user input to extract workout data
+    - Validating workout completeness
+    - Creating, reading, updating, and deleting workout records
+    - Routing requests based on user intent
+
+    Attributes
+    ----------
+    workout_parser : WorkoutParser
+        Agent responsible for parsing user input into structured workout data.
+    validator : WorkoutValidator
+        Validator that checks if all required workout fields are present.
+    database : WorkoutCRUD
+        Database service for CRUD operations on workout records.
+    reader : WorkoutReader
+        Agent responsible for retrieving and formatting workout data.
+    graph : StateGraph
+        Compiled LangGraph workflow graph.
+
+    Examples
+    --------
+    >>> graph = WorkoutGraph()
+    >>> state = WorkoutState(user_input="Squats 3x10 @ 135 lbs", user_id="user123")
+    >>> result = graph.run(state)
+    >>> print(result.response)
+    """
+
     def __init__(self):
+        """Initialize the WorkoutGraph with all required agents and build the workflow graph.
+
+        Initializes the workout parser, validator, database service, and reader agent,
+        then constructs and compiles the state graph workflow.
+        """
         # initialize the workout parser
         self.workout_parser = WorkoutParser()
         # initialize the validator
@@ -26,6 +67,25 @@ class WorkoutGraph:
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
+        """Build and compile the workout workflow state graph.
+
+        Constructs a LangGraph workflow with nodes for parsing, validation,
+        reading, updating, deleting, and saving workouts. Sets up conditional
+        routing based on user intent.
+
+        Returns
+        -------
+        StateGraph
+            Compiled state graph ready for execution.
+
+        Notes
+        -----
+        The graph structure:
+        1. START -> workout_parser
+        2. workout_parser -> routes to reader/updator/deletor/validator based on intent
+        3. validator -> routes to workout_saver or END based on validation status
+        4. All terminal nodes (reader, updator, deletor, saver) -> END
+        """
         workflow = StateGraph(WorkoutState)
 
         # add nodes
@@ -67,14 +127,24 @@ class WorkoutGraph:
     def _route_by_intent(
         self, state: WorkoutState
     ) -> Literal["reader", "updator", "deletor", "validator"]:
-        """
-        Route based on intent after parsing.
+        """Route workflow based on user intent after parsing.
 
-        Routes to:
-        - reader if intent is "get" (read operation)
-        - deletor if intent is "delete" (delete operation)
-        - updator if intent is "put" and workout_id is present (update operation)
-        - validator if intent is "put" and no workout_id (create operation)
+        Determines the next node in the workflow based on the intent extracted
+        from user input and the presence of workout_id.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            Current state containing intent and workout_id.
+
+        Returns
+        -------
+        Literal["reader", "updator", "deletor", "validator"]
+            Next node identifier based on routing logic:
+            - "reader": For "get" intent (read operations)
+            - "deletor": For "delete" intent (delete operations)
+            - "updator": For "put" intent with workout_id (update operations)
+            - "validator": For "put" intent without workout_id (create operations)
         """
         if state.intent == "get":
             return "reader"
@@ -90,21 +160,51 @@ class WorkoutGraph:
     def _should_save_to_database(
         self, state: WorkoutState
     ) -> Literal["database", "end"]:
-        """
-        Determine if workout should be saved to database.
+        """Determine if validated workout should be saved to database.
 
-        Routes to database if:
-        - intent is "put" (save operation)
-        - validation_status is "complete" (all required fields present)
+        Checks if the workout has passed validation and should proceed to
+        database storage, or if it should end the workflow.
 
-        Otherwise routes to end.
+        Parameters
+        ----------
+        state : WorkoutState
+            Current state containing intent and validation_status.
+
+        Returns
+        -------
+        Literal["database", "end"]
+            "database" if intent is "put" and validation_status is "complete",
+            "end" otherwise.
         """
         if state.intent == "put" and state.validation_status == "complete":
             return "database"
         return "end"
 
     def _workout_parser_node(self, state: WorkoutState) -> WorkoutState:
-        """Parse workout object from user input."""
+        """Parse workout data from user input using LLM parser.
+
+        Processes user input through the workout parser agent to extract
+        structured workout data (exercise, sets, reps, weight, etc.). If
+        workout_id is missing for update/delete operations, attempts to
+        auto-detect it from the most recent workout.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing user_input to parse.
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with parsed workout fields (exercise, sets, reps,
+            weight, rest_time, comments, workout_id).
+
+        Notes
+        -----
+        For update/delete operations without explicit workout_id, the node
+        will attempt to retrieve the most recent workout for the user as
+        a fallback mechanism.
+        """
         # Process the user input through the parser
         parsed_result = self.workout_parser.process(state.user_input)
 
@@ -154,7 +254,30 @@ class WorkoutGraph:
         return state
 
     def _workout_reader_node(self, state: WorkoutState) -> WorkoutState:
-        """Read workout data based on user query."""
+        """Read and retrieve workout data based on user query.
+
+        Uses the workout reader agent to process natural language queries
+        and retrieve relevant workout records from the database. The reader
+        uses LLM with tools to interpret queries and fetch matching workouts.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing user_input query and user_id.
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with response containing workout data in JSON format.
+            Also attempts to extract and store workout_id from the first result
+            for potential future update operations.
+
+        Raises
+        ------
+        Exception
+            Logs errors but returns error message in state.response rather
+            than raising to allow workflow to complete gracefully.
+        """
         try:
             logger.info(f"Retrieving workouts for user: {state.user_id}")
             result = self.reader.retrieve(state.user_input, state.user_id)
@@ -190,11 +313,48 @@ class WorkoutGraph:
         return state
 
     def _workout_validator_node(self, state: WorkoutState) -> WorkoutState:
-        """Validate that all required workout fields are present."""
+        """Validate that all required workout fields are present.
+
+        Checks if the workout state contains all required fields (exercise,
+        sets, reps, weight) and updates validation_status accordingly.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing workout fields to validate.
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with validation_status ("complete" or "incomplete")
+            and missing_fields list populated.
+        """
         return cast(WorkoutState, self.validator.validate(state))
 
     def _workout_saver_node(self, state: WorkoutState) -> WorkoutState:
-        """Save workout to database. Called only when validation is complete and intent is 'put'."""
+        """Save validated workout to database.
+
+        Creates a new workout record in the database using the validated
+        workout data from state. This node is only reached when validation
+        is complete and intent is "put".
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing validated workout data to save.
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with response message indicating success or failure.
+
+        Raises
+        ------
+        ValueError
+            If required fields are missing (should not occur if validation passed).
+        Exception
+            Logs unexpected errors and returns error message in state.response.
+        """
         try:
             logger.info("Attempting to save workout to database...")
             saved_workout = self.database.create(state)
@@ -218,7 +378,30 @@ class WorkoutGraph:
         return state
 
     def _workout_updator_node(self, state: WorkoutState) -> WorkoutState:
-        """Update workout in database. Requires workout_id and fields to update."""
+        """Update existing workout record in database.
+
+        Updates specified fields of an existing workout identified by workout_id.
+        Only fields present in state are updated. Requires workout_id to be set.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing workout_id and fields to update (exercise, sets,
+            reps, weight, rest_time, comments).
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with response message describing what was changed,
+            or error message if update failed.
+
+        Raises
+        ------
+        ValueError
+            If workout_id is missing or no fields to update are provided.
+        Exception
+            Logs unexpected errors and returns error message in state.response.
+        """
         try:
             from uuid import UUID
 
@@ -306,7 +489,29 @@ class WorkoutGraph:
         return state
 
     def _workout_deletor_node(self, state: WorkoutState) -> WorkoutState:
-        """Delete workout from database. Requires workout_id."""
+        """Delete workout record from database.
+
+        Removes a workout record identified by workout_id. Requires workout_id
+        to be set in state. Only deletes workouts belonging to the user_id
+        in state for security.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State containing workout_id and user_id for deletion.
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with response message indicating success or failure.
+
+        Raises
+        ------
+        ValueError
+            If workout_id is missing.
+        Exception
+            Logs unexpected errors and returns error message in state.response.
+        """
         try:
             from uuid import UUID
 
@@ -349,17 +554,43 @@ class WorkoutGraph:
         return state
 
     def _handle_error(self, state):
-        pass
+        """Handle errors in the workflow.
+
+        Placeholder for error handling logic. Currently does nothing.
+
+        Parameters
+        ----------
+        state : WorkoutState
+            State at the point of error.
+
+        Returns
+        -------
+        WorkoutState
+            State with error information (not currently implemented).
+        """
 
     def run(self, state: WorkoutState) -> WorkoutState:
-        """
-        Run the workout graph with the given state using the compiled graph.
+        """Execute the workout graph workflow with the given initial state.
 
-        Args:
-            state: Initial WorkoutState with user input and intent
+        Invokes the compiled state graph with the provided state, executing
+        all nodes in the workflow based on routing logic. Converts state
+        to/from dictionary format as required by LangGraph.
 
-        Returns:
-            Final WorkoutState after graph execution
+        Parameters
+        ----------
+        state : WorkoutState
+            Initial state containing user_input, user_id, and optionally intent.
+
+        Returns
+        -------
+        WorkoutState
+            Final state after graph execution, containing response message
+            and any processed workout data.
+
+        Notes
+        -----
+        The state is converted to a dictionary for graph.invoke() and then
+        reconstructed as a WorkoutState object from the result.
         """
         logger.info(f"Running workout graph with intent: {state.intent}")
         # Convert state to dict for graph.invoke()

@@ -1,3 +1,10 @@
+"""Workout reader agent module.
+
+This module provides an LLM-based agent for reading and retrieving workout
+data from the database using natural language queries. The agent uses tools
+to query the database based on user intent.
+"""
+
 import json
 from pathlib import Path
 from typing import Optional
@@ -32,21 +39,43 @@ def _query_workouts_impl(
     order_by: Optional[str] = "created_at",
     order_direction: Optional[str] = "desc",
 ) -> str:
-    """
-    Query workouts from the database based on various filters.
+    """Query workouts from the database based on various filters.
 
-    Args:
-        user_id: The user ID to filter workouts by (required)
-        exercise: Filter by specific exercise name (e.g., "squats", "bench press")
-        exercise_type: Filter by exercise type/category (e.g., "legs", "chest", "arms")
-        start_date: Start date for date range filter (YYYY-MM-DD format)
-        end_date: End date for date range filter (YYYY-MM-DD format)
-        limit: Maximum number of workouts to return (default: 10)
-        order_by: Field to order by (default: "created_at")
-        order_direction: Order direction - "asc" or "desc" (default: "desc")
+    Implementation function for the query_workouts tool. Queries the database
+    using WorkoutCRUD and returns results as a JSON string for LLM consumption.
 
-    Returns:
-        JSON string of workout data matching the query
+    Parameters
+    ----------
+    user_id : str
+        The user ID to filter workouts by (required).
+    exercise : Optional[str], optional
+        Filter by specific exercise name (e.g., "squats", "bench press").
+        Uses case-insensitive partial matching.
+    exercise_type : Optional[str], optional
+        Filter by exercise type/category (e.g., "legs", "chest", "arms").
+        Currently not implemented in database schema.
+    start_date : Optional[str], optional
+        Start date for date range filter in YYYY-MM-DD format.
+    end_date : Optional[str], optional
+        End date for date range filter in YYYY-MM-DD format.
+    limit : Optional[int], optional
+        Maximum number of workouts to return (default: 10).
+    order_by : Optional[str], optional
+        Field to order by (default: "created_at").
+    order_direction : Optional[str], optional
+        Order direction - "asc" or "desc" (default: "desc").
+
+    Returns
+    -------
+    str
+        JSON string representation of workout data matching the query.
+        Returns empty array JSON if no workouts found, or error JSON on failure.
+
+    Notes
+    -----
+    This function is wrapped as a LangChain StructuredTool for use by the
+    WorkoutReader agent. Errors are caught and returned as JSON error objects
+    rather than raising exceptions.
     """
     try:
         logger.info(
@@ -88,7 +117,37 @@ query_workouts = StructuredTool.from_function(
 
 
 class WorkoutReader:
+    """Agent for reading and retrieving workout data using natural language queries.
+
+    Uses an LLM with tools to interpret user queries and retrieve relevant
+    workout records from the database. The agent can understand complex queries
+    like "show me my last 5 squats workouts" and translate them into database
+    queries.
+
+    Attributes
+    ----------
+    prompt : ChatPromptTemplate
+        LangChain prompt template for the reader agent.
+    llm : ChatOpenAI
+        OpenAI LLM instance configured for tool use.
+    tools : list[StructuredTool]
+        List of available tools (query_workouts).
+    llm_with_tools : ChatOpenAI
+        LLM instance bound with tools for function calling.
+
+    Examples
+    --------
+    >>> reader = WorkoutReader()
+    >>> result = reader.retrieve("Show me my last 3 squats workouts", "user123")
+    >>> print(result)  # JSON string of workout data
+    """
+
     def __init__(self):
+        """Initialize the WorkoutReader with LLM, tools, and prompt templates.
+
+        Loads prompt templates from markdown files, initializes the OpenAI LLM,
+        and binds the query_workouts tool for function calling.
+        """
         # Initialize the prompt
         # Get the prompt templates directory relative to this file
         prompts_dir = Path(__file__).parent.parent / "prompt_templates"
@@ -110,15 +169,30 @@ class WorkoutReader:
         self.llm_with_tools = self.llm.bind_tools(self.tools)
 
     def retrieve(self, user_query: str, user_id: str) -> str:
-        """
-        Process a user query and retrieve relevant workout data.
+        """Process a user query and retrieve relevant workout data.
 
-        Args:
-            user_query: Natural language query from the user
-            user_id: User ID to filter workouts
+        Uses the LLM with tools to interpret the natural language query,
+        call the query_workouts tool with appropriate parameters, and return
+        the results directly as JSON.
 
-        Returns:
-            JSON string of workout data (no second LLM call)
+        Parameters
+        ----------
+        user_query : str
+            Natural language query from the user (e.g., "show me my last 5 squats").
+        user_id : str
+            User ID to filter workouts by (automatically added to tool calls).
+
+        Returns
+        -------
+        str
+            JSON string representation of workout data matching the query.
+            If no tool call is detected, returns the LLM's text response.
+
+        Notes
+        -----
+        The method performs a single LLM call with tool binding. If the LLM
+        decides to call the query_workouts tool, the tool result is returned
+        directly without a second LLM call for formatting.
         """
         from gymmando_graph.utils import Logger
 

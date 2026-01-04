@@ -13,6 +13,13 @@ _logger = None
 
 
 def _get_logger():
+    """Get or create the logger instance (lazy loading).
+
+    Returns
+    -------
+    logging.Logger
+        Logger instance for this module.
+    """
     global _logger
     if _logger is None:
         _logger = Logger().get_logger()
@@ -22,31 +29,55 @@ def _get_logger():
 class PromptTemplateLoader:
     """Loads prompt templates from markdown files.
 
-    Attributes:
-        prompt_template_directory: Path to the directory containing prompt templates.
+    Provides functionality to load and read prompt template files stored as
+    markdown. Templates are loaded from a specified directory and returned
+    as strings for use in LangChain prompts.
+
+    Attributes
+    ----------
+    templates_directory : Path
+        Path to the directory containing prompt templates.
+
+    Examples
+    --------
+    >>> loader = PromptTemplateLoader("/path/to/templates")
+    >>> template = loader.load_template("system_prompt.md")
     """
 
     def __init__(self, templates_directory: str):
         """Initialize the PromptTemplateLoader with a directory path.
 
-        Args:
-            template_directory: Path to the directory containing prompt templates.
+        Parameters
+        ----------
+        templates_directory : str
+            Path to the directory containing prompt templates.
         """
         self.templates_directory = Path(templates_directory)
 
     def load_template(self, file_name: str) -> str:
-        """Loads a prompt template from a markdown file.
+        """Load a prompt template from a markdown file.
 
-        Args:
-            file_name: Name of the markdown file to load.
+        Reads the specified markdown file from the templates directory and
+        returns its content as a string.
 
-        Returns:
+        Parameters
+        ----------
+        file_name : str
+            Name of the markdown file to load (e.g., "system_prompt.md").
+
+        Returns
+        -------
+        str
             The content of the template file as a string.
 
-        Raises:
-            FileNotFoundError: If the specified file does not exist.
-            PermissionError: If there are insufficient permissions to read the file.
-            Exception: For any other unexpected errors during file reading.
+        Raises
+        ------
+        FileNotFoundError
+            If the specified file does not exist in the templates directory.
+        PermissionError
+            If there are insufficient permissions to read the file.
+        Exception
+            For any other unexpected errors during file reading.
         """
         try:
             file_path = self.templates_directory / file_name
