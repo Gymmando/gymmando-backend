@@ -1,5 +1,7 @@
-"""
-Supabase database client initialization.
+"""Supabase database client initialization module.
+
+This module provides a singleton Supabase client instance with lazy loading
+for database operations across the application.
 """
 
 import os
@@ -18,7 +20,30 @@ _client: Client = None
 
 
 def get_supabase_client() -> Client:
-    """Get initialized Supabase client (Lazy Loading)."""
+    """Get initialized Supabase client instance (lazy loading).
+
+    Returns a singleton Supabase client instance. The client is created on
+    first call and reused for subsequent calls. Environment variables
+    SUPABASE_URL and SUPABASE_KEY must be set.
+
+    Returns
+    -------
+    Client
+        Initialized Supabase client instance.
+
+    Raises
+    ------
+    ValueError
+        If SUPABASE_URL or SUPABASE_KEY environment variables are missing.
+    Exception
+        If Supabase client creation fails for any reason.
+
+    Notes
+    -----
+    Uses lazy loading pattern - the client is only created when first accessed,
+    not at module import time. This allows the module to be imported even if
+    environment variables are not yet set.
+    """
     global _client
     if _client is not None:
         return _client

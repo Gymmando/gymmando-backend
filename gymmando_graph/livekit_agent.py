@@ -1,3 +1,10 @@
+"""LiveKit agent module for Gymmando voice assistant.
+
+This module implements a LiveKit agent that provides voice-based interaction
+with the Gymmando fitness assistant. The agent handles speech-to-text, text-to-speech,
+and integrates with the workout graph for processing fitness-related queries.
+"""
+
 import json
 import os
 from pathlib import Path
@@ -24,7 +31,38 @@ PROMPTS_DIR = PROJECT_ROOT / "livekit_agent_prompt_templates"
 
 
 class Gymmando(Agent):
+    """LiveKit agent for Gymmando fitness assistant.
+
+    Extends LiveKit's Agent class to provide voice-based interaction with
+    workout management functionality. Handles workout operations through
+    the workout graph based on user voice commands.
+
+    Attributes
+    ----------
+    workout_graph : WorkoutGraph
+        Workout graph instance for processing workout operations.
+    user_id : str
+        Identifier for the current user.
+
+    Examples
+    --------
+    The agent is typically instantiated by the entrypoint function when
+    a LiveKit job is assigned. It processes voice input and responds with
+    workout-related information.
+    """
+
     def __init__(self, user_id: str = "default_user"):
+        """Initialize the Gymmando agent.
+
+        Loads the system prompt from markdown file and initializes the
+        workout graph for processing user requests.
+
+        Parameters
+        ----------
+        user_id : str, optional
+            Identifier for the user (default: "default_user").
+            Used to scope workout operations to the correct user.
+        """
         # ROBUST PATH CHECK
         prompt_path = PROMPTS_DIR / "main_llm_system_prompt.md"
         if prompt_path.exists():
@@ -40,6 +78,32 @@ class Gymmando(Agent):
 
     @function_tool
     async def workout(self, context: RunContext, transcript: str, intent: str) -> str:
+        """Process workout-related voice commands.
+
+        Function tool that processes workout operations based on user voice
+        input. Routes to appropriate workflow based on intent (get, put, delete).
+
+        Parameters
+        ----------
+        context : RunContext
+            LiveKit run context for the current agent session.
+        transcript : str
+            Transcribed text from user's voice input.
+        intent : str
+            Classified intent: "get" (read), "put" (create/update), or "delete".
+
+        Returns
+        -------
+        str
+            Response message to be spoken back to the user, containing workout
+            data, confirmation, or error message.
+
+        Notes
+        -----
+        For "get" intent, returns workout data directly.
+        For "put" intent, returns validation status or confirmation.
+        For "delete" intent, returns deletion confirmation.
+        """
         logger.info(f"🏋️ Workout called - Intent: {intent}, User ID: {self.user_id}")
         state = WorkoutState(user_input=transcript, user_id=self.user_id, intent=intent)
         logger.info(f"📝 Created WorkoutState with user_id: {state.user_id}")
@@ -80,6 +144,29 @@ class Gymmando(Agent):
 
 
 async def entrypoint(ctx: agents.JobContext):
+    """Entrypoint function for LiveKit agent jobs.
+
+    Initializes and starts the Gymmando agent session when a LiveKit job
+    is assigned. Handles user identification, session setup, and greeting.
+
+    Parameters
+    ----------
+    ctx : agents.JobContext
+        LiveKit job context containing room and job information.
+
+    Notes
+    -----
+    This function:
+    1. Extracts user_id from room participants or metadata
+    2. Initializes STT, TTS, LLM, and VAD services
+    3. Creates and starts the Gymmando agent session
+    4. Sends an initial greeting to the user
+
+    The function attempts multiple strategies to identify the user:
+    - From participant identity
+    - From room metadata (JSON or string)
+    - Falls back to "default_user" if not found
+    """
     logger.info(f"🚀 Job Assigned: {ctx.job.id}")
     logger.info(f"📋 Room: {ctx.room.name}, Room ID: {ctx.room.sid}")
     logger.info(f"👥 Current participants in room: {len(ctx.room.remote_participants)}")

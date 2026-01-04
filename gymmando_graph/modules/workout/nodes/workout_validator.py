@@ -1,23 +1,63 @@
+"""Workout validator node module.
+
+This module provides validation logic for workout data to ensure all required
+fields are present before saving to the database.
+"""
+
 from gymmando_graph.modules.workout.schemas import WorkoutState
 
 
 class WorkoutValidator:
-    """Validates workout data completeness."""
+    """Validates workout data completeness.
+
+    Checks that all required workout fields are present and non-empty.
+    Updates the state with validation status and list of missing fields.
+
+    Attributes
+    ----------
+    REQUIRED_FIELDS : list[str]
+        List of field names that must be present for a valid workout:
+        ["exercise", "sets", "reps", "weight"].
+
+    Examples
+    --------
+    >>> validator = WorkoutValidator()
+    >>> state = WorkoutState(exercise="squats", sets=3, reps=10, weight="135 lbs")
+    >>> validated_state = validator.validate(state)
+    >>> print(validated_state.validation_status)  # "complete"
+    """
 
     REQUIRED_FIELDS = ["exercise", "sets", "reps", "weight"]
 
     def __init__(self):
-        pass
+        """Initialize the WorkoutValidator.
+
+        Sets up the validator with the list of required fields.
+        """
 
     def validate(self, state: WorkoutState) -> WorkoutState:
-        """
-        Check if all required fields are present.
+        """Check if all required workout fields are present.
 
-        Args:
-            state: Current workout state
+        Validates that exercise, sets, reps, and weight are all present
+        and non-empty. Updates the state with validation status and
+        missing fields list.
 
-        Returns:
-            Updated state with validation results
+        Parameters
+        ----------
+        state : WorkoutState
+            Current workout state to validate.
+
+        Returns
+        -------
+        WorkoutState
+            Updated state with:
+            - validation_status: "complete" if all fields present, "incomplete" otherwise
+            - missing_fields: List of field names that are missing or empty.
+
+        Notes
+        -----
+        Fields are considered missing if they are None or empty strings.
+        The state object is modified in-place and returned.
         """
         missing_fields = []
 

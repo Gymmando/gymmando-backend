@@ -1,6 +1,8 @@
-"""
-Database models for Supabase tables.
-These models represent the database schema and are used for type-safe database operations.
+"""Database models for Supabase tables.
+
+This module defines Pydantic models that represent the database schema for
+type-safe database operations. Models include both read (full) and create
+(partial) variants.
 """
 
 import uuid
@@ -12,11 +14,43 @@ from pydantic import BaseModel, Field
 
 
 class WorkoutDBModel(BaseModel):
-    """
-    Database model for the workouts table.
+    """Database model for the workouts table.
 
-    This model represents a workout record as stored in Supabase.
-    All fields match the database schema exactly.
+    This model represents a complete workout record as stored in Supabase.
+    All fields match the database schema exactly, including auto-generated
+    fields like id and created_at.
+
+    Attributes
+    ----------
+    id : UUID
+        Primary key, auto-generated UUID.
+    user_id : str
+        User identifier (Firebase UID).
+    exercise : str
+        Name of the exercise.
+    sets : int
+        Number of sets performed.
+    reps : int
+        Number of repetitions per set.
+    weight : str
+        Weight used (e.g., '135 lbs', 'bodyweight').
+    rest_time : Optional[int]
+        Rest time between sets in seconds.
+    comments : Optional[str]
+        Additional notes or comments.
+    created_at : Optional[datetime]
+        Timestamp when record was created (auto-generated).
+
+    Examples
+    --------
+    >>> workout = WorkoutDBModel(
+    ...     id=uuid.uuid4(),
+    ...     user_id="user123",
+    ...     exercise="squats",
+    ...     sets=3,
+    ...     reps=10,
+    ...     weight="135 lbs"
+    ... )
     """
 
     id: UUID = Field(default_factory=uuid.uuid4, description="Primary key")
@@ -36,7 +70,11 @@ class WorkoutDBModel(BaseModel):
     )
 
     class Config:
-        """Pydantic config for the model."""
+        """Pydantic configuration for the model.
+
+        Configures JSON encoding for UUID and datetime fields, and enables
+        ORM mode for compatibility with database ORMs.
+        """
 
         from_attributes = True
         json_encoders = {
@@ -46,11 +84,39 @@ class WorkoutDBModel(BaseModel):
 
 
 class WorkoutCreateModel(BaseModel):
-    """
-    Model for creating a new workout record.
+    """Model for creating a new workout record.
 
-    Excludes auto-generated fields like id and created_at.
-    Used when inserting new workouts into the database.
+    Excludes auto-generated fields like id and created_at. Used when
+    inserting new workouts into the database. All fields except rest_time
+    and comments are required.
+
+    Attributes
+    ----------
+    user_id : str
+        User identifier (Firebase UID).
+    exercise : str
+        Name of the exercise.
+    sets : int
+        Number of sets performed.
+    reps : int
+        Number of repetitions per set.
+    weight : str
+        Weight used (e.g., '135 lbs', 'bodyweight').
+    rest_time : Optional[int], optional
+        Rest time between sets in seconds.
+    comments : Optional[str], optional
+        Additional notes or comments.
+
+    Examples
+    --------
+    >>> create_model = WorkoutCreateModel(
+    ...     user_id="user123",
+    ...     exercise="squats",
+    ...     sets=3,
+    ...     reps=10,
+    ...     weight="135 lbs"
+    ... )
+    >>> db_dict = create_model.to_db_dict()
     """
 
     user_id: str
@@ -62,5 +128,14 @@ class WorkoutCreateModel(BaseModel):
     comments: Optional[str] = None
 
     def to_db_dict(self) -> dict[str, Any]:
-        """Convert to dictionary suitable for database insertion."""
+        """Convert to dictionary suitable for database insertion.
+
+        Excludes None values to avoid inserting null fields unnecessarily.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary representation of the model with None values excluded,
+            ready for Supabase insertion.
+        """
         return dict(self.model_dump(exclude_none=True))
