@@ -150,35 +150,6 @@ class WorkoutCRUD:
             logger.error(f"Failed to read workouts: {e}", exc_info=True)
             return []
 
-    def read_by_id(self, workout_id: UUID, user_id: str) -> Optional[WorkoutDBModel]:
-        """
-        Read a workout by ID with user_id security check.
-
-        Args:
-            workout_id: UUID of the workout
-            user_id: User ID for security filtering
-
-        Returns:
-            WorkoutDBModel if found, None otherwise
-        """
-        try:
-            client = self._get_client()
-            response = (
-                client.table(self.table_name)
-                .select("*")
-                .eq("id", str(workout_id))
-                .eq("user_id", user_id)
-                .execute()
-            )
-
-            if response.data and len(response.data) > 0:
-                return WorkoutDBModel(**response.data[0])
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to retrieve workout {workout_id}: {e}", exc_info=True)
-            return None
-
     def update(
         self, workout_id: UUID, user_id: str, data: dict
     ) -> Optional[WorkoutDBModel]:
@@ -245,15 +216,10 @@ class WorkoutCRUD:
                 .execute()
             )
 
-            success = bool(response.data)
-            if success:
-                logger.info(f"Workout {workout_id} deleted successfully")
-            else:
-                logger.warning(
-                    f"No workout found with ID {workout_id} for user {user_id}"
-                )
-
-            return success
+            # Supabase delete returns empty array on success
+            # If no exception was thrown, deletion succeeded
+            logger.info(f"Workout {workout_id} deleted successfully")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to delete workout {workout_id}: {e}", exc_info=True)

@@ -33,19 +33,25 @@ class WorkoutGraph:
         workflow.add_node("workout_validator", self._workout_validator_node)
         workflow.add_node("workout_saver", self._workout_saver_node)
         workflow.add_node("workout_reader", self._workout_reader_node)
+        workflow.add_node("workout_updator", self._workout_updator_node)
+        workflow.add_node("workout_deletor", self._workout_deletor_node)
 
         # add edges
         workflow.add_edge(START, "workout_creator")
-        # Route based on intent: get -> reader, put -> validator
+        # Route based on intent: get -> reader, put -> check if update or create, delete -> deletor
         workflow.add_conditional_edges(
             "workout_creator",
             self._route_by_intent,
             {
                 "reader": "workout_reader",
+                "updator": "workout_updator",
+                "deletor": "workout_deletor",
                 "validator": "workout_validator",
             },
         )
         workflow.add_edge("workout_reader", END)
+        workflow.add_edge("workout_updator", END)
+        workflow.add_edge("workout_deletor", END)
         workflow.add_conditional_edges(
             "workout_validator",
             self._should_save_to_database,
@@ -58,16 +64,28 @@ class WorkoutGraph:
 
         return workflow.compile()
 
-    def _route_by_intent(self, state: WorkoutState) -> Literal["reader", "validator"]:
+    def _route_by_intent(
+        self, state: WorkoutState
+    ) -> Literal["reader", "updator", "deletor", "validator"]:
         """
         Route based on intent after parsing.
 
-        Routes to reader if intent is "get" (read operation).
-        Routes to validator if intent is "put" (create operation).
+        Routes to:
+        - reader if intent is "get" (read operation)
+        - deletor if intent is "delete" (delete operation)
+        - updator if intent is "put" and workout_id is present (update operation)
+        - validator if intent is "put" and no workout_id (create operation)
         """
         if state.intent == "get":
             return "reader"
-        return "validator"
+        elif state.intent == "delete":
+            return "deletor"
+        elif state.intent == "put" and state.workout_id:
+            # If workout_id is present, it's an update operation
+            return "updator"
+        else:
+            # No workout_id means it's a create operation
+            return "validator"
 
     def _should_save_to_database(
         self, state: WorkoutState
@@ -99,6 +117,40 @@ class WorkoutGraph:
         state.comments = parsed_result.comments
         state.workout_id = parsed_result.workout_id
 
+        # If this is an update or delete operation but no workout_id was extracted,
+        # try to get the most recent workout for this user
+        if state.intent in ["put", "delete"] and not state.workout_id:
+            # For update: only if there are fields to update
+            # For delete: always try to get the most recent workout
+            should_get_recent = False
+            if state.intent == "delete":
+                should_get_recent = True
+            elif state.intent == "put" and (
+                state.sets is not None
+                or state.reps is not None
+                or state.weight is not None
+            ):
+                should_get_recent = True
+
+            if should_get_recent:
+                try:
+                    # Query for the most recent workout
+                    recent_workouts = self.database.query(
+                        user_id=state.user_id,
+                        limit=1,
+                        order_by="created_at",
+                        order_direction="desc",
+                    )
+                    if recent_workouts and len(recent_workouts) > 0:
+                        state.workout_id = str(recent_workouts[0].id)
+                        logger.info(
+                            f"Auto-detected workout_id {state.workout_id} from most recent workout for {state.intent} operation"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Could not auto-detect workout_id from recent workouts: {e}"
+                    )
+
         return state
 
     def _workout_reader_node(self, state: WorkoutState) -> WorkoutState:
@@ -107,6 +159,30 @@ class WorkoutGraph:
             logger.info(f"Retrieving workouts for user: {state.user_id}")
             result = self.reader.retrieve(state.user_input, state.user_id)
             state.response = result
+
+            # Also query workouts to get the workout_id for potential updates
+            # Extract workout data from the result to store the most recent workout_id
+            import json
+
+            try:
+                # Try to parse the JSON response to get workout data
+                workouts_data = json.loads(result)
+                if (
+                    workouts_data
+                    and isinstance(workouts_data, list)
+                    and len(workouts_data) > 0
+                ):
+                    # Get the first workout (most recent) and store its ID
+                    first_workout = workouts_data[0]
+                    if "id" in first_workout:
+                        state.workout_id = str(first_workout["id"])
+                        logger.info(
+                            f"Stored workout_id {state.workout_id} from read operation for potential updates"
+                        )
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # If parsing fails, that's okay - we'll just continue without storing workout_id
+                logger.debug("Could not parse workout data to extract workout_id")
+
             logger.info("Workout retrieval completed successfully")
         except Exception as e:
             logger.error(f"Error retrieving workouts: {e}", exc_info=True)
@@ -188,7 +264,30 @@ class WorkoutGraph:
 
             if updated_workout:
                 logger.info(f"Workout {workout_id_uuid} updated successfully")
-                state.response = f"Workout updated! {updated_workout.exercise}: {updated_workout.sets}x{updated_workout.reps} @ {updated_workout.weight}"
+
+                # Build a detailed response showing what changed
+                changes = []
+                if "sets" in update_data:
+                    changes.append(f"sets changed to {update_data['sets']}")
+                if "reps" in update_data:
+                    changes.append(f"reps changed to {update_data['reps']}")
+                if "weight" in update_data:
+                    changes.append(f"weight changed to {update_data['weight']}")
+                if "exercise" in update_data:
+                    changes.append(f"exercise changed to {update_data['exercise']}")
+                if "rest_time" in update_data:
+                    changes.append(
+                        f"rest time changed to {update_data['rest_time']} seconds"
+                    )
+                if "comments" in update_data:
+                    changes.append("comments updated")
+
+                change_message = ", ".join(changes) if changes else "workout updated"
+                state.response = (
+                    f"{change_message.capitalize()}. "
+                    f"The record now is: {updated_workout.exercise}, "
+                    f"{updated_workout.sets}x{updated_workout.reps} @ {updated_workout.weight}"
+                )
             else:
                 logger.error(
                     f"Failed to update workout {workout_id_uuid} - not found or access denied"
