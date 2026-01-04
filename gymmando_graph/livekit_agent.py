@@ -46,17 +46,34 @@ class Gymmando(Agent):
         try:
             state = self.workout_graph.run(state)
 
+            # If state.response is already set (from update/delete/save operations), return it directly
+            if state.response:
+                logger.info(
+                    f"✅ Returning response from graph: {state.response[:100]}..."
+                )
+                return state.response
+
             # Handle "get" intent - return the response directly (contains query results)
             if intent == "get":
                 return state.response if state.response else "No workout data found."
 
-            # Handle "put" intent - check validation status
-            if state.validation_status == "complete":
-                response = f"Logged: {state.exercise}, {state.sets}x{state.reps}."
-                if state.weight:
-                    response += f" at {state.weight}."
-                return response + " Want to save it?"
-            return f"Missing info: {', '.join(state.missing_fields)}."
+            # Handle "put" intent - check validation status (for create operations)
+            if intent == "put":
+                if state.validation_status == "complete":
+                    response = f"Logged: {state.exercise}, {state.sets}x{state.reps}."
+                    if state.weight:
+                        response += f" at {state.weight}."
+                    return response + " Want to save it?"
+                return f"Missing info: {', '.join(state.missing_fields)}."
+
+            # Handle "delete" intent
+            if intent == "delete":
+                return (
+                    state.response if state.response else "Delete operation completed."
+                )
+
+            # Fallback
+            return state.response if state.response else "Operation completed."
         except Exception as e:
             logger.error(f"Error in workout tool: {e}", exc_info=True)
             return "Error processing workout data."
