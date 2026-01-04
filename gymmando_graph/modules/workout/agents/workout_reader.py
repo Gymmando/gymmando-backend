@@ -87,16 +87,14 @@ query_workouts = StructuredTool.from_function(
 )
 
 
-class WorkoutRetriever:
+class WorkoutReader:
     def __init__(self):
         # Initialize the prompt
         # Get the prompt templates directory relative to this file
         prompts_dir = Path(__file__).parent.parent / "prompt_templates"
         ptl = PromptTemplateLoader(str(prompts_dir))
-        system_template = ptl.load_template(
-            "workout_retriever_prompt_template_system.md"
-        )
-        human_template = ptl.load_template("workout_retriever_prompt_template_human.md")
+        system_template = ptl.load_template("workout_reader_prompt_template_system.md")
+        human_template = ptl.load_template("workout_reader_prompt_template_human.md")
         system_message = SystemMessagePromptTemplate.from_template(
             template=system_template
         )
@@ -182,7 +180,7 @@ if __name__ == "__main__":
     print()
 
     # Now test the agent
-    agent = WorkoutRetriever()
+    agent = WorkoutReader()
 
     # Test 1: Check if any workouts exist for the user (no exercise filter)
     print("Test 1: Getting any workouts for user...")

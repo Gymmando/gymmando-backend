@@ -10,24 +10,24 @@ from langchain_core.prompts import (
 )
 from langchain_openai import ChatOpenAI
 
-from gymmando_graph.modules.workout.schemas import WorkoutParserResponse
+from gymmando_graph.modules.workout.schemas import WorkoutCreatorResponse
 from gymmando_graph.utils import PromptTemplateLoader
 
 load_dotenv()
 
 
-class WorkoutParser:
+class WorkoutCreator:
     def __init__(self):
         # define the parser
-        self.parser = PydanticOutputParser(pydantic_object=WorkoutParserResponse)
+        self.parser = PydanticOutputParser(pydantic_object=WorkoutCreatorResponse)
         format_instructions = self.parser.get_format_instructions()
 
         # initialize the prompt
         # Get the prompt templates directory relative to this file
         prompts_dir = Path(__file__).parent.parent / "prompt_templates"
         ptl = PromptTemplateLoader(str(prompts_dir))
-        system_template = ptl.load_template("workout_parser_prompt_template_system.md")
-        human_template = ptl.load_template("workout_parser_prompt_template_human.md")
+        system_template = ptl.load_template("workout_creator_prompt_template_system.md")
+        human_template = ptl.load_template("workout_creator_prompt_template_human.md")
         system_message = SystemMessagePromptTemplate.from_template(
             template=system_template
         )
@@ -51,13 +51,13 @@ class WorkoutParser:
     def show_prompt(self, user_input: str):
         return self.prompt.format(user_input=user_input)
 
-    def process(self, user_input: str) -> WorkoutParserResponse:
+    def process(self, user_input: str) -> WorkoutCreatorResponse:
         """Process user input through the LLM chain and return parsed response."""
         response = self.chain.invoke({"user_input": user_input})
-        return cast(WorkoutParserResponse, response)
+        return cast(WorkoutCreatorResponse, response)
 
 
 if __name__ == "__main__":
-    parser = WorkoutParser()
-    result = parser.process("Squats 20 reps, 3 sets and for 20 minutes?")
+    creator = WorkoutCreator()
+    result = creator.process("Squats 20 reps, 3 sets and for 20 minutes?")
     print(result.model_dump_json(indent=2))
