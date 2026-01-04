@@ -3,8 +3,8 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class WorkoutParserResponse(BaseModel):
-    """Structured output from the Parser Agent (LLM)."""
+class WorkoutCreatorResponse(BaseModel):
+    """Structured output from the Creator Agent (LLM)."""
 
     exercise: Optional[str] = Field(
         default=None, description="Name of the exercise (e.g., 'squats', 'bench press')"
@@ -21,4 +21,8 @@ class WorkoutParserResponse(BaseModel):
     )
     comments: Optional[str] = Field(
         default=None, description="Any additional notes from the user"
+    )
+    workout_id: Optional[str] = Field(
+        default=None,
+        description="Workout ID (UUID) if mentioned in user input for update/delete operations",
     )
