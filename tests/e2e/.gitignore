@@ -1,0 +1,6 @@
+# E2E test specific ignores
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/

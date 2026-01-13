@@ -1,0 +1,69 @@
+services:
+  # LiveKit Server for E2E testing
+  livekit:
+    image: livekit/livekit-server:latest
+    ports:
+      - "7880:7880"  # HTTP/WebSocket
+      - "7881:7881"  # HTTP/WebSocket (TLS)
+      - "7882:7882"  # RTCP
+      # UDP ports for RTP - using smaller range to avoid conflicts
+      - "50000-50010:50000-50010/udp"
+    environment:
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=devsecret
+    volumes:
+      - ./tests/e2e/livekit.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7880/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # PostgreSQL for test database (alternative to Supabase)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: gymmando_test
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: gymmando_test
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gymmando_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI API service (for E2E tests)
+  api:
+    build:
+      context: .
+      dockerfile: gymmando_api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LIVEKIT_URL=ws://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=devsecret
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_KEY=${SUPABASE_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+    depends_on:
+      livekit:
+        condition: service_healthy
+    volumes:
+      - ./gymmando_api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/token?user_id=test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_test_data:
